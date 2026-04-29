@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 import customtkinter as ctk
 
-from adb.device_manager import ConnectionState, get_connection_status
-from adb.sms_sender import is_companion_installed
+from adb.device_manager import ConnectionState, ConnectionStatus, get_connection_status
+from adb.sms_sender import install_companion, is_companion_installed, open_permission_screen
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,14 @@ class SendSettingsDraft:
     group_size: int
     sms_delay_sec: float
     group_delay_sec: float
+
+
+@dataclass(frozen=True)
+class PhoneCheckResult:
+    """Результат проверки телефона и Android-компаньона для UI."""
+
+    ready: bool
+    message: str
 
 
 class SettingsScreen(ctk.CTkFrame):
@@ -133,24 +141,9 @@ class SettingsScreen(ctk.CTkFrame):
 
     def refresh_adb_status(self) -> None:
         """Проверяет подключение телефона и наличие Android-компаньона."""
-        status = get_connection_status()
-        self._adb_ready = status.state == ConnectionState.READY
-
-        message = status.message
-        if self._adb_ready:
-            try:
-                companion_ready = is_companion_installed()
-            except Exception as exc:  # noqa: BLE001 - статус должен попасть в UI.
-                companion_ready = False
-                message = f"{message}\nAndroid-компаньон: ошибка проверки ({exc})"
-            else:
-                if companion_ready:
-                    message = f"{message}\nAndroid-компаньон установлен"
-                else:
-                    message = f"{message}\nAndroid-компаньон не установлен"
-            self._adb_ready = self._adb_ready and companion_ready
-
-        self._phone_status.configure(text=message)
+        result = check_phone_ready()
+        self._adb_ready = result.ready
+        self._phone_status.configure(text=result.message)
         self._update_start_state()
 
     def _handle_settings_changed(self, event: object | None = None) -> None:
@@ -206,4 +199,40 @@ def parse_settings(
         group_size=group_size,
         sms_delay_sec=sms_delay_sec,
         group_delay_sec=group_delay_sec,
+    )
+
+
+def check_phone_ready() -> PhoneCheckResult:
+    """Проверяет телефон и при необходимости устанавливает Android-компаньон."""
+    status = get_connection_status()
+    if status.state != ConnectionState.READY:
+        return PhoneCheckResult(ready=False, message=status.message)
+
+    return _check_companion_ready(status)
+
+
+def _check_companion_ready(status: ConnectionStatus) -> PhoneCheckResult:
+    try:
+        if is_companion_installed():
+            install_companion()
+            return PhoneCheckResult(
+                ready=True,
+                message=f"{status.message}\nAndroid-компаньон установлен и обновлён",
+            )
+
+        install_companion()
+        open_permission_screen()
+    except Exception as exc:  # noqa: BLE001 - статус должен попасть в UI.
+        return PhoneCheckResult(
+            ready=False,
+            message=f"{status.message}\nAndroid-компаньон: ошибка установки или проверки ({exc})",
+        )
+
+    return PhoneCheckResult(
+        ready=False,
+        message=(
+            f"{status.message}\n"
+            "Android-компаньон установлен. Выдайте разрешение SEND_SMS на телефоне "
+            "и нажмите «Проверить ADB» ещё раз."
+        ),
     )

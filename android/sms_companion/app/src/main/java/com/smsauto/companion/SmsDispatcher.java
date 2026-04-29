@@ -3,7 +3,6 @@ package com.smsauto.companion;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.telephony.SmsManager;
 
 import java.util.ArrayList;
@@ -13,11 +12,6 @@ public final class SmsDispatcher {
     }
 
     public static void send(Context context, String requestId, String phone, String message) {
-        if (!context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)) {
-            StatusStore.appendStatus(context, requestId, phone, "FAILED", "Telephony messaging missing");
-            return;
-        }
-
         try {
             SmsManager smsManager = SmsManager.getDefault();
             ArrayList<String> parts = smsManager.divideMessage(message);
