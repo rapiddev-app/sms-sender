@@ -11,3 +11,5 @@ venv/
 .vscode/
 .ruff_cache/
 .pytest_cache/
+.claude/
+/test_contacts.xlsx
