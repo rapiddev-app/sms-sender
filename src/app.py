@@ -322,6 +322,7 @@ class SMSAutoApp:
             on_resumed=self._handle_sending_resumed,
             on_stopped=self._handle_sending_completed,
             on_finished=self._handle_sending_completed,
+            on_restart_requested=self.reset_workflow,
         )
         self._sending_screen_frame = self._screen_frame
         self._sending_screen = screen
@@ -381,6 +382,24 @@ class SMSAutoApp:
     def _handle_sending_completed(self) -> None:
         self._sending_paused = False
         self._sending_completed = True
+        self._update_navigation_state()
+
+    def reset_workflow(self) -> None:
+        """Сбрасывает wizard к состоянию свежего запуска приложения."""
+        saved_templates = self._state.saved_templates
+        self._state = WizardState(saved_templates=saved_templates)
+        self._current_step = WizardStep.IMPORT
+        self._sending_started = False
+        self._sending_paused = False
+        self._sending_completed = False
+        self._sending_screen = None
+        self._sending_screen_frame = None
+
+        if self._screen_frame is not None:
+            self._screen_frame.destroy()
+            self._screen_frame = None
+
+        self._render_current_screen()
         self._update_navigation_state()
 
     def _build_state_summary(self) -> str:

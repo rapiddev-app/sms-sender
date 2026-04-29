@@ -135,12 +135,11 @@ class ImportScreen(ctk.CTkFrame):
 
         if status_override is not None:
             status_text = status_override
-        elif self._excel_path is None:
-            status_text = "Контактов: 0 | Ошибок: 0"
         else:
-            status_text = (
-                f"Контактов: {len(self._contacts)} | "
-                f"Ошибок: {len(self._validation_errors)}"
+            status_text = build_import_status(
+                has_file=self._excel_path is not None,
+                contact_count=len(self._contacts),
+                error_count=len(self._validation_errors),
             )
         self._status_label.configure(text=status_text)
 
@@ -210,6 +209,17 @@ def format_validation_error(error: ValidationError) -> str:
     phone = error.raw_phone or "пусто"
     variable = error.raw_variable or "пусто"
     return f"Строка {error.row}: {reason} | номер: {phone} | переменная: {variable}"
+
+
+def build_import_status(*, has_file: bool, contact_count: int, error_count: int) -> str:
+    """Форматирует статус импорта для экрана загрузки Excel."""
+    if not has_file:
+        return "Контактов: 0 | Ошибок: 0"
+    if contact_count <= 0 and error_count <= 0:
+        return "В файле нет валидных контактов. Проверьте строки после заголовка."
+    if contact_count <= 0:
+        return f"Нет валидных контактов | Ошибок: {error_count}"
+    return f"Контактов: {contact_count} | Ошибок: {error_count}"
 
 
 def _clear_frame(frame: ctk.CTkScrollableFrame) -> None:

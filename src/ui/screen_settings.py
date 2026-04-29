@@ -127,7 +127,7 @@ class SettingsScreen(ctk.CTkFrame):
         self._start_button = ctk.CTkButton(
             panel,
             text="Начать рассылку",
-            command=self._on_start,
+            command=self._handle_start_requested,
         )
         self._start_button.grid(row=3, column=0, padx=16, pady=(8, 16), sticky="ew")
 
@@ -166,6 +166,11 @@ class SettingsScreen(ctk.CTkFrame):
             self._settings_error.configure(text="")
             self._on_settings_changed(draft)
         self._update_start_state()
+
+    def _handle_start_requested(self) -> None:
+        self.refresh_adb_status()
+        if self._adb_ready:
+            self._on_start()
 
     def _update_start_state(self) -> None:
         settings_ready = not self._settings_error.cget("text")

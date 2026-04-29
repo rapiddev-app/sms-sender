@@ -115,6 +115,14 @@ class BuilderScreen(ctk.CTkFrame):
         )
         insert_button.grid(row=0, column=1, padx=(12, 0))
 
+        self._template_error_label = ctk.CTkLabel(
+            toolbar,
+            text="",
+            anchor="w",
+            text_color=("#b00020", "#ff8a80"),
+        )
+        self._template_error_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
         self._text_box = ctk.CTkTextbox(self, wrap="word")
         self._text_box.grid(row=2, column=0, sticky="nsew", padx=(0, 8))
         self._text_box.insert("1.0", template)
@@ -214,6 +222,7 @@ class BuilderScreen(ctk.CTkFrame):
                 f"{stats.segments} SMS | {stats.encoding.upper()}"
             )
         )
+        self._template_error_label.configure(text=build_template_error(template))
 
         if sample_contact is None:
             self._sample_label.configure(text="Нет контактов для предпросмотра")
@@ -274,3 +283,10 @@ class BuilderScreen(ctk.CTkFrame):
 def is_template_ready(template: str) -> bool:
     """Возвращает `True`, если шаблон можно передавать на следующий шаг."""
     return bool(template.strip())
+
+
+def build_template_error(template: str) -> str:
+    """Возвращает сообщение об ошибке шаблона или пустую строку."""
+    if is_template_ready(template):
+        return ""
+    return "Введите текст SMS-шаблона"

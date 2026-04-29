@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Thread
-from tkinter import TclError, filedialog
+from tkinter import TclError, filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -53,6 +53,7 @@ class SendingScreen(ctk.CTkFrame):
         on_resumed: Callable[[], None] | None = None,
         on_stopped: Callable[[], None] | None = None,
         on_finished: Callable[[], None] | None = None,
+        on_restart_requested: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, fg_color="transparent")
         self._source_excel_path = source_excel_path
@@ -64,6 +65,7 @@ class SendingScreen(ctk.CTkFrame):
         self._on_resumed = on_resumed
         self._on_stopped = on_stopped
         self._on_finished = on_finished
+        self._on_restart_requested = on_restart_requested
         self._queue = SendQueue(
             contacts=contacts,
             template=template,
@@ -144,13 +146,22 @@ class SendingScreen(ctk.CTkFrame):
         )
         self._export_button.grid(row=0, column=3, padx=(8, 0))
 
+        self._restart_button = ctk.CTkButton(
+            controls,
+            text="Новая рассылка",
+            command=self._request_restart,
+            width=150,
+            state="disabled",
+        )
+        self._restart_button.grid(row=0, column=4, padx=(8, 0))
+
         self._export_status_label = ctk.CTkLabel(
             controls,
             text="",
             anchor="w",
             text_color=("gray35", "gray70"),
         )
-        self._export_status_label.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+        self._export_status_label.grid(row=1, column=0, columnspan=5, sticky="ew", pady=(8, 0))
 
     def _build_log(self) -> None:
         log_panel = ctk.CTkFrame(self)
@@ -267,8 +278,9 @@ class SendingScreen(ctk.CTkFrame):
     def _enable_export(self) -> None:
         if self._source_excel_path is None:
             self._set_export_status("Исходный Excel-файл не выбран", is_error=True)
-            return
-        self._export_button.configure(state="normal")
+        else:
+            self._export_button.configure(state="normal")
+        self._restart_button.configure(state="normal")
 
     def _export_report(self) -> None:
         if self._source_excel_path is None:
@@ -299,6 +311,13 @@ class SendingScreen(ctk.CTkFrame):
     def _set_export_status(self, text: str, *, is_error: bool = False) -> None:
         color = ("#b00020", "#ff8a80") if is_error else ("gray35", "gray70")
         self._export_status_label.configure(text=text, text_color=color)
+
+    def _request_restart(self) -> None:
+        if self._on_restart_requested is None:
+            return
+        if not confirm_restart_after_sending():
+            return
+        self._on_restart_requested()
 
 
 def calculate_progress(stats: SendingStats) -> float:
@@ -335,3 +354,15 @@ def update_status_from_event(
 def build_default_report_filename(source_excel_path: Path) -> str:
     """Формирует имя файла отчёта рядом с исходным Excel."""
     return f"{source_excel_path.stem}_report.xlsx"
+
+
+def confirm_restart_after_sending() -> bool:
+    """Спрашивает подтверждение сброса текущей рассылки."""
+    return messagebox.askyesno(
+        title="Новая рассылка",
+        message=(
+            "Текущий результат рассылки будет сброшен.\n\n"
+            "Перед началом новой рассылки убедитесь, что отчёт Excel выгружен.\n\n"
+            "Начать новую рассылку?"
+        ),
+    )
