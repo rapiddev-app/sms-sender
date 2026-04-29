@@ -13,3 +13,8 @@ venv/
 .pytest_cache/
 .claude/
 /test_contacts.xlsx
+
+# ADB Platform Tools — скачиваются через scripts/fetch_adb.py
+/bin/adb/adb.exe
+/bin/adb/AdbWinApi.dll
+/bin/adb/AdbWinUsbApi.dll

@@ -1,8 +1,8 @@
 # Tasklist: Авто рассылка СМС
 
 ## Текущий статус
-- Итерация: 1 / 4
-- Прогресс: 10 / 30 задач (33%)
+- Итерация: 2 / 4
+- Прогресс: 13 / 30 задач (43%)
 
 ---
 
@@ -12,16 +12,16 @@
 - [x] `core/excel_loader.py` — чтение `.xlsx`, извлечение двух столбцов (номер + переменная)
 - [x] Валидация номеров: проверка формата (10-11 цифр, поддержка `7xxx`, `8xxx`, `+7xxx`)
 - [x] Возврат структурированного списка контактов + списка ошибок валидации
-- [ ] `core/message_builder.py` — подстановка переменной в шаблон, подсчёт символов
+- [x] `core/message_builder.py` — подстановка переменной в шаблон, подсчёт символов
 - [x] Юнит-тесты: `tests/test_excel_loader.py`
-- [ ] Юнит-тесты: `tests/test_message_builder.py`
+- [x] Юнит-тесты: `tests/test_message_builder.py`
 
 > **Результат:** модули `core/` полностью покрыты тестами и работают независимо от GUI.
 
 ---
 
 ### Iteration 2: ADB-слой — работа с телефоном
-- [ ] Скачать и положить `adb.exe` + `AdbWinApi.dll` + `AdbWinUsbApi.dll` в `bin/adb/`
+- [x] Скачать и положить `adb.exe` + `AdbWinApi.dll` + `AdbWinUsbApi.dll` в `bin/adb/` (через `scripts/fetch_adb.py`)
 - [ ] `adb/device_manager.py` — поиск подключённых устройств, статус (подключён / не найден)
 - [ ] `adb/sms_sender.py` — отправка SMS через ADB-команду (`am start` с ACTION_SENDTO)
 - [ ] `adb/status_reader.py` — чтение статуса отправленных SMS из content provider телефона

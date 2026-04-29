@@ -20,7 +20,13 @@ uv sync
 
 ### 2. Положить ADB-бинарники
 
-Скачать [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools) и распаковать `adb.exe`, `AdbWinApi.dll`, `AdbWinUsbApi.dll` в папку `bin/adb/`.
+```bash
+uv run python scripts/fetch_adb.py
+```
+
+Скрипт скачает [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools) с официального сервера Google и распакует `adb.exe`, `AdbWinApi.dll`, `AdbWinUsbApi.dll` в `bin/adb/`. Идемпотентен: если файлы уже на месте — ничего не делает.
+
+При желании можно положить файлы вручную в `bin/adb/`.
 
 ### 3. Запустить приложение
 
