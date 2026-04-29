@@ -10,6 +10,7 @@ from pathlib import Path
 import customtkinter as ctk
 
 from core.models import Contact, ValidationError
+from ui.screen_builder import BuilderScreen, is_template_ready
 from ui.screen_import import ImportScreen
 
 
@@ -141,6 +142,10 @@ class SMSAutoApp:
         """Переходит к следующему шагу, если он существует."""
         if self._current_step == WizardStep.IMPORT and not self._state.contacts:
             return
+        if self._current_step == WizardStep.BUILDER and not is_template_ready(
+            self._state.template
+        ):
+            return
         current_index = _STEP_ORDER.index(self._current_step)
         if current_index >= len(_STEP_ORDER) - 1:
             return
@@ -194,6 +199,9 @@ class SMSAutoApp:
         if self._current_step == WizardStep.IMPORT:
             self._render_import_screen(body)
             return
+        if self._current_step == WizardStep.BUILDER:
+            self._render_builder_screen(body)
+            return
 
         state_label = ctk.CTkLabel(
             body,
@@ -214,6 +222,15 @@ class SMSAutoApp:
         )
         screen.grid(row=0, column=0, sticky="nsew")
 
+    def _render_builder_screen(self, master: ctk.CTkFrame) -> None:
+        screen = BuilderScreen(
+            master,
+            contacts=self._state.contacts,
+            template=self._state.template,
+            on_template_changed=self._handle_template_changed,
+        )
+        screen.grid(row=0, column=0, sticky="nsew")
+
     def _handle_import_loaded(
         self,
         excel_path: Path,
@@ -223,6 +240,10 @@ class SMSAutoApp:
         self._state.excel_path = excel_path
         self._state.contacts = contacts
         self._state.validation_errors = validation_errors
+        self._update_navigation_state()
+
+    def _handle_template_changed(self, template: str) -> None:
+        self._state.template = template
         self._update_navigation_state()
 
     def _build_state_summary(self) -> str:
@@ -242,6 +263,10 @@ class SMSAutoApp:
         self._back_button.configure(state="normal" if current_index > 0 else "disabled")
         next_enabled = current_index < len(_STEP_ORDER) - 1
         if self._current_step == WizardStep.IMPORT and not self._state.contacts:
+            next_enabled = False
+        if self._current_step == WizardStep.BUILDER and not is_template_ready(
+            self._state.template
+        ):
             next_enabled = False
         self._next_button.configure(state="normal" if next_enabled else "disabled")
 
