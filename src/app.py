@@ -13,6 +13,7 @@ import customtkinter as ctk
 
 from core.models import Contact, ValidationError
 from core.send_queue import SendQueueSettings
+from core.template_store import SavedTemplate, TemplateStore, TemplateStoreError
 from ui.screen_builder import BuilderScreen, is_template_ready
 from ui.screen_import import ImportScreen
 from ui.screen_sending import SendingScreen
@@ -39,6 +40,7 @@ class WizardState:
     group_size: int = 10
     sms_delay_sec: float = 3.0
     group_delay_sec: float = 60.0
+    saved_templates: list[SavedTemplate] = field(default_factory=list)
 
 
 _STEP_ORDER = [
@@ -83,6 +85,11 @@ class SMSAutoApp:
         ctk.set_default_color_theme("blue")
 
         self._state = WizardState()
+        self._template_store = TemplateStore()
+        try:
+            self._state.saved_templates = self._template_store.load_templates()
+        except TemplateStoreError:
+            self._state.saved_templates = []
         self._current_step = WizardStep.IMPORT
         self._sending_started = False
         self._sending_paused = False
@@ -324,7 +331,10 @@ class SMSAutoApp:
             master,
             contacts=self._state.contacts,
             template=self._state.template,
+            templates=self._state.saved_templates,
             on_template_changed=self._handle_template_changed,
+            on_save_template=self._handle_save_template,
+            on_delete_template=self._handle_delete_template,
         )
         screen.grid(row=0, column=0, sticky="nsew")
 
@@ -344,6 +354,14 @@ class SMSAutoApp:
         if self._sending_screen is not None:
             self._sending_screen.update_template(template)
         self._update_navigation_state()
+
+    def _handle_save_template(self, name: str, text: str) -> list[SavedTemplate]:
+        self._state.saved_templates = self._template_store.save_template(name, text)
+        return self._state.saved_templates
+
+    def _handle_delete_template(self, name: str) -> list[SavedTemplate]:
+        self._state.saved_templates = self._template_store.delete_template(name)
+        return self._state.saved_templates
 
     def _handle_settings_changed(self, settings: SendSettingsDraft) -> None:
         self._state.group_size = settings.group_size
