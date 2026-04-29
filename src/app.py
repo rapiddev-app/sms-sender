@@ -3,20 +3,83 @@
 Управляет окном и навигацией между экранами (wizard).
 """
 
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+
 import customtkinter as ctk
+
+from core.models import Contact, ValidationError
+
+
+class WizardStep(Enum):
+    """Шаги wizard-интерфейса."""
+
+    IMPORT = 0
+    BUILDER = 1
+    SETTINGS = 2
+    SENDING = 3
+
+
+@dataclass
+class WizardState:
+    """Состояние, которое передаётся между экранами wizard."""
+
+    excel_path: Path | None = None
+    contacts: list[Contact] = field(default_factory=list)
+    validation_errors: list[ValidationError] = field(default_factory=list)
+    template: str = ""
+    group_size: int = 10
+    sms_delay_sec: float = 3.0
+    group_delay_sec: float = 60.0
+
+
+_STEP_ORDER = [
+    WizardStep.IMPORT,
+    WizardStep.BUILDER,
+    WizardStep.SETTINGS,
+    WizardStep.SENDING,
+]
+
+_STEP_TITLES = {
+    WizardStep.IMPORT: "Загрузка базы",
+    WizardStep.BUILDER: "Шаблон SMS",
+    WizardStep.SETTINGS: "Настройки",
+    WizardStep.SENDING: "Рассылка",
+}
+
+_STEP_SUBTITLES = {
+    WizardStep.IMPORT: "Импорт контактов и проверка номеров",
+    WizardStep.BUILDER: "Текст сообщения и персональная переменная",
+    WizardStep.SETTINGS: "Группы, задержки и подключение телефона",
+    WizardStep.SENDING: "Прогресс, статусы и управление очередью",
+}
 
 
 class SMSAutoApp:
-    """Корневой класс приложения — инициализирует окно и тему."""
+    """Корневой класс приложения — инициализирует окно, тему и wizard-навигацию."""
 
     def __init__(self) -> None:
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
+        self._state = WizardState()
+        self._current_step = WizardStep.IMPORT
+        self._step_buttons: dict[WizardStep, ctk.CTkButton] = {}
+        self._screen_frame: ctk.CTkFrame | None = None
+
         self._root = ctk.CTk()
         self._root.title("Авто рассылка СМС")
         self._root.geometry("960x680")
         self._root.minsize(800, 600)
+        self._root.grid_columnconfigure(0, weight=1)
+        self._root.grid_rowconfigure(1, weight=1)
+
+        self._build_header()
+        self._build_screen_host()
+        self._build_footer()
+        self.show_step(WizardStep.IMPORT)
+
         # Центрируем окно при запуске
         self._root.after(0, self._center_window)
 
@@ -30,6 +93,134 @@ class SMSAutoApp:
         x = (screen_w - w) // 2
         y = (screen_h - h) // 2
         self._root.geometry(f"{w}x{h}+{x}+{y}")
+
+    def _build_header(self) -> None:
+        header = ctk.CTkFrame(self._root, corner_radius=0)
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_columnconfigure(tuple(range(len(_STEP_ORDER))), weight=1)
+
+        for index, step in enumerate(_STEP_ORDER, start=1):
+            button = ctk.CTkButton(
+                header,
+                text=f"{index}. {_STEP_TITLES[step]}",
+                command=lambda selected_step=step: self.show_step(selected_step),
+                height=40,
+            )
+            button.grid(row=0, column=index - 1, padx=8, pady=12, sticky="ew")
+            self._step_buttons[step] = button
+
+    def _build_screen_host(self) -> None:
+        self._content = ctk.CTkFrame(self._root, corner_radius=0)
+        self._content.grid(row=1, column=0, padx=24, pady=(18, 12), sticky="nsew")
+        self._content.grid_columnconfigure(0, weight=1)
+        self._content.grid_rowconfigure(0, weight=1)
+
+    def _build_footer(self) -> None:
+        footer = ctk.CTkFrame(self._root, corner_radius=0)
+        footer.grid(row=2, column=0, sticky="ew")
+        footer.grid_columnconfigure(0, weight=1)
+
+        self._back_button = ctk.CTkButton(
+            footer,
+            text="Назад",
+            command=self.go_back,
+            width=140,
+        )
+        self._back_button.grid(row=0, column=1, padx=(24, 8), pady=14)
+
+        self._next_button = ctk.CTkButton(
+            footer,
+            text="Далее",
+            command=self.go_next,
+            width=140,
+        )
+        self._next_button.grid(row=0, column=2, padx=(8, 24), pady=14)
+
+    def go_next(self) -> None:
+        """Переходит к следующему шагу, если он существует."""
+        current_index = _STEP_ORDER.index(self._current_step)
+        if current_index >= len(_STEP_ORDER) - 1:
+            return
+        self.show_step(_STEP_ORDER[current_index + 1])
+
+    def go_back(self) -> None:
+        """Переходит к предыдущему шагу, если он существует."""
+        current_index = _STEP_ORDER.index(self._current_step)
+        if current_index <= 0:
+            return
+        self.show_step(_STEP_ORDER[current_index - 1])
+
+    def show_step(self, step: WizardStep) -> None:
+        """Отображает выбранный шаг wizard."""
+        self._current_step = step
+        self._render_current_screen()
+        self._update_navigation_state()
+
+    def _render_current_screen(self) -> None:
+        if self._screen_frame is not None:
+            self._screen_frame.destroy()
+
+        self._screen_frame = ctk.CTkFrame(self._content, corner_radius=8)
+        self._screen_frame.grid(row=0, column=0, sticky="nsew")
+        self._screen_frame.grid_columnconfigure(0, weight=1)
+        self._screen_frame.grid_rowconfigure(2, weight=1)
+
+        step_number = _STEP_ORDER.index(self._current_step) + 1
+        title = ctk.CTkLabel(
+            self._screen_frame,
+            text=f"{step_number}. {_STEP_TITLES[self._current_step]}",
+            font=ctk.CTkFont(size=24, weight="bold"),
+            anchor="w",
+        )
+        title.grid(row=0, column=0, padx=28, pady=(28, 6), sticky="ew")
+
+        subtitle = ctk.CTkLabel(
+            self._screen_frame,
+            text=_STEP_SUBTITLES[self._current_step],
+            font=ctk.CTkFont(size=14),
+            anchor="w",
+            text_color=("gray35", "gray70"),
+        )
+        subtitle.grid(row=1, column=0, padx=28, pady=(0, 20), sticky="ew")
+
+        body = ctk.CTkFrame(self._screen_frame, fg_color="transparent")
+        body.grid(row=2, column=0, padx=28, pady=(0, 28), sticky="nsew")
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        state_label = ctk.CTkLabel(
+            body,
+            text=self._build_state_summary(),
+            justify="left",
+            anchor="nw",
+            font=ctk.CTkFont(size=15),
+        )
+        state_label.grid(row=0, column=0, sticky="nsew")
+
+    def _build_state_summary(self) -> str:
+        excel_name = self._state.excel_path.name if self._state.excel_path else "не выбран"
+        return (
+            f"Файл: {excel_name}\n"
+            f"Контактов: {len(self._state.contacts)}\n"
+            f"Ошибок импорта: {len(self._state.validation_errors)}\n"
+            f"Шаблон: {'задан' if self._state.template else 'не задан'}\n"
+            f"Группа: {self._state.group_size}\n"
+            f"Задержка SMS: {self._state.sms_delay_sec:g} сек\n"
+            f"Задержка группы: {self._state.group_delay_sec:g} сек"
+        )
+
+    def _update_navigation_state(self) -> None:
+        current_index = _STEP_ORDER.index(self._current_step)
+        self._back_button.configure(state="normal" if current_index > 0 else "disabled")
+        self._next_button.configure(
+            state="normal" if current_index < len(_STEP_ORDER) - 1 else "disabled"
+        )
+
+        for step, button in self._step_buttons.items():
+            if step == self._current_step:
+                button.configure(fg_color=("#1f6aa5", "#1f6aa5"))
+            else:
+                button.configure(fg_color=("gray75", "gray25"))
 
     def run(self) -> None:
         """Запускает главный цикл событий GUI."""
