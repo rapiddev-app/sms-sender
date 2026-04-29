@@ -12,6 +12,7 @@ import customtkinter as ctk
 from core.models import Contact, ValidationError
 from ui.screen_builder import BuilderScreen, is_template_ready
 from ui.screen_import import ImportScreen
+from ui.screen_settings import SendSettingsDraft, SettingsScreen
 
 
 class WizardStep(Enum):
@@ -202,6 +203,9 @@ class SMSAutoApp:
         if self._current_step == WizardStep.BUILDER:
             self._render_builder_screen(body)
             return
+        if self._current_step == WizardStep.SETTINGS:
+            self._render_settings_screen(body)
+            return
 
         state_label = ctk.CTkLabel(
             body,
@@ -219,6 +223,17 @@ class SMSAutoApp:
             contacts=self._state.contacts,
             validation_errors=self._state.validation_errors,
             on_loaded=self._handle_import_loaded,
+        )
+        screen.grid(row=0, column=0, sticky="nsew")
+
+    def _render_settings_screen(self, master: ctk.CTkFrame) -> None:
+        screen = SettingsScreen(
+            master,
+            group_size=self._state.group_size,
+            sms_delay_sec=self._state.sms_delay_sec,
+            group_delay_sec=self._state.group_delay_sec,
+            on_settings_changed=self._handle_settings_changed,
+            on_start=lambda: self.show_step(WizardStep.SENDING),
         )
         screen.grid(row=0, column=0, sticky="nsew")
 
@@ -245,6 +260,11 @@ class SMSAutoApp:
     def _handle_template_changed(self, template: str) -> None:
         self._state.template = template
         self._update_navigation_state()
+
+    def _handle_settings_changed(self, settings: SendSettingsDraft) -> None:
+        self._state.group_size = settings.group_size
+        self._state.sms_delay_sec = settings.sms_delay_sec
+        self._state.group_delay_sec = settings.group_delay_sec
 
     def _build_state_summary(self) -> str:
         excel_name = self._state.excel_path.name if self._state.excel_path else "не выбран"
