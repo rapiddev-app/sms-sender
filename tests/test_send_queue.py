@@ -123,6 +123,33 @@ def test_stop_inside_sleep_prevents_next_send():
     assert queue.state == QueueState.STOPPED
 
 
+def test_update_template_affects_not_started_contacts():
+    sent: list[tuple[str, str]] = []
+    queue: SendQueue
+
+    def send_func(phone: str, message: str):
+        sent.append((phone, message))
+        return _FakeSmsCommandResult(request_id=phone)
+
+    def sleep_func(delay: float) -> None:
+        queue.update_template("Новый текст для {переменная}")
+
+    queue = SendQueue(
+        contacts=_contacts(2),
+        template="Старый текст для {переменная}",
+        settings=SendQueueSettings(group_size=10, sms_delay_sec=1, group_delay_sec=0),
+        send_func=send_func,
+        sleep_func=sleep_func,
+    )
+
+    queue.run()
+
+    assert sent == [
+        ("+79990000000", "Старый текст для Имя0"),
+        ("+79990000001", "Новый текст для Имя1"),
+    ]
+
+
 def test_stop_before_run_stops_before_first_send():
     sent: list[str] = []
     queue = SendQueue(

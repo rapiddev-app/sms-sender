@@ -9,6 +9,7 @@ from adb import sms_sender
 from adb.companion import COMPANION_ACTION_SEND_SMS, COMPANION_COMMAND_RECEIVER
 from adb.device_manager import AdbError
 from adb.sms_sender import (
+    _quote_shell_extra,
     install_companion,
     is_companion_installed,
     open_permission_screen,
@@ -67,9 +68,15 @@ def test_send_sms_broadcasts_command_to_companion(monkeypatch):
         "+79990000000",
         "--es",
         "message",
-        "Привет Иван",
+        "'Привет Иван'",
     ]
     assert captured["kwargs"]["capture_output"] is True
+
+
+def test_quote_shell_extra_protects_url_and_newline():
+    message = "Проверка\nhttps://poverka48.ru?a=1&b=2"
+
+    assert _quote_shell_extra(message) == "'Проверка\nhttps://poverka48.ru?a=1&b=2'"
 
 
 def test_send_sms_reads_auth_token_when_not_passed(monkeypatch):

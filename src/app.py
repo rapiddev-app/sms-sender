@@ -10,8 +10,10 @@ from pathlib import Path
 import customtkinter as ctk
 
 from core.models import Contact, ValidationError
+from core.send_queue import SendQueueSettings
 from ui.screen_builder import BuilderScreen, is_template_ready
 from ui.screen_import import ImportScreen
+from ui.screen_sending import SendingScreen
 from ui.screen_settings import SendSettingsDraft, SettingsScreen
 
 
@@ -68,6 +70,11 @@ class SMSAutoApp:
 
         self._state = WizardState()
         self._current_step = WizardStep.IMPORT
+        self._sending_started = False
+        self._sending_paused = False
+        self._sending_completed = False
+        self._sending_screen_frame: ctk.CTkFrame | None = None
+        self._sending_screen: SendingScreen | None = None
         self._step_buttons: dict[WizardStep, ctk.CTkButton] = {}
         self._screen_frame: ctk.CTkFrame | None = None
 
@@ -154,6 +161,9 @@ class SMSAutoApp:
 
     def go_back(self) -> None:
         """Переходит к предыдущему шагу, если он существует."""
+        if self._current_step == WizardStep.SENDING and self._sending_paused:
+            self.show_step(WizardStep.BUILDER)
+            return
         current_index = _STEP_ORDER.index(self._current_step)
         if current_index <= 0:
             return
@@ -161,13 +171,32 @@ class SMSAutoApp:
 
     def show_step(self, step: WizardStep) -> None:
         """Отображает выбранный шаг wizard."""
+        if step == self._current_step and self._screen_frame is not None:
+            return
+        if step == WizardStep.SENDING and not self._sending_started:
+            return
+        if (
+            self._current_step == WizardStep.SENDING
+            and step != WizardStep.SENDING
+            and not self._sending_paused
+            and not self._sending_completed
+        ):
+            return
         self._current_step = step
         self._render_current_screen()
         self._update_navigation_state()
 
     def _render_current_screen(self) -> None:
         if self._screen_frame is not None:
-            self._screen_frame.destroy()
+            if self._screen_frame is self._sending_screen_frame:
+                self._screen_frame.grid_forget()
+            else:
+                self._screen_frame.destroy()
+
+        if self._current_step == WizardStep.SENDING and self._sending_screen_frame is not None:
+            self._screen_frame = self._sending_screen_frame
+            self._screen_frame.grid(row=0, column=0, sticky="nsew")
+            return
 
         self._screen_frame = ctk.CTkFrame(self._content, corner_radius=8)
         self._screen_frame.grid(row=0, column=0, sticky="nsew")
@@ -206,6 +235,9 @@ class SMSAutoApp:
         if self._current_step == WizardStep.SETTINGS:
             self._render_settings_screen(body)
             return
+        if self._current_step == WizardStep.SENDING:
+            self._render_sending_screen(body)
+            return
 
         state_label = ctk.CTkLabel(
             body,
@@ -233,8 +265,33 @@ class SMSAutoApp:
             sms_delay_sec=self._state.sms_delay_sec,
             group_delay_sec=self._state.group_delay_sec,
             on_settings_changed=self._handle_settings_changed,
-            on_start=lambda: self.show_step(WizardStep.SENDING),
+            on_start=self._start_sending,
         )
+        screen.grid(row=0, column=0, sticky="nsew")
+
+    def _start_sending(self) -> None:
+        self._sending_started = True
+        self._sending_paused = False
+        self._sending_completed = False
+        self.show_step(WizardStep.SENDING)
+
+    def _render_sending_screen(self, master: ctk.CTkFrame) -> None:
+        screen = SendingScreen(
+            master,
+            contacts=self._state.contacts,
+            template=self._state.template,
+            settings=SendQueueSettings(
+                group_size=self._state.group_size,
+                sms_delay_sec=self._state.sms_delay_sec,
+                group_delay_sec=self._state.group_delay_sec,
+            ),
+            on_paused=self._handle_sending_paused,
+            on_resumed=self._handle_sending_resumed,
+            on_stopped=self._handle_sending_completed,
+            on_finished=self._handle_sending_completed,
+        )
+        self._sending_screen_frame = self._screen_frame
+        self._sending_screen = screen
         screen.grid(row=0, column=0, sticky="nsew")
 
     def _render_builder_screen(self, master: ctk.CTkFrame) -> None:
@@ -259,12 +316,28 @@ class SMSAutoApp:
 
     def _handle_template_changed(self, template: str) -> None:
         self._state.template = template
+        if self._sending_screen is not None:
+            self._sending_screen.update_template(template)
         self._update_navigation_state()
 
     def _handle_settings_changed(self, settings: SendSettingsDraft) -> None:
         self._state.group_size = settings.group_size
         self._state.sms_delay_sec = settings.sms_delay_sec
         self._state.group_delay_sec = settings.group_delay_sec
+
+    def _handle_sending_paused(self) -> None:
+        self._sending_paused = True
+        self._update_navigation_state()
+
+    def _handle_sending_resumed(self) -> None:
+        self._sending_paused = False
+        self._current_step = WizardStep.SENDING
+        self._update_navigation_state()
+
+    def _handle_sending_completed(self) -> None:
+        self._sending_paused = False
+        self._sending_completed = True
+        self._update_navigation_state()
 
     def _build_state_summary(self) -> str:
         excel_name = self._state.excel_path.name if self._state.excel_path else "не выбран"
@@ -280,6 +353,21 @@ class SMSAutoApp:
 
     def _update_navigation_state(self) -> None:
         current_index = _STEP_ORDER.index(self._current_step)
+        if self._current_step == WizardStep.SENDING:
+            self._back_button.configure(state="normal" if self._sending_paused else "disabled")
+            self._next_button.configure(state="disabled")
+            for step, button in self._step_buttons.items():
+                if step == self._current_step:
+                    button.configure(
+                        state="normal" if self._sending_paused else "disabled",
+                        fg_color=("#1f6aa5", "#1f6aa5"),
+                    )
+                elif self._sending_paused and step == WizardStep.BUILDER:
+                    button.configure(state="normal", fg_color=("gray75", "gray25"))
+                else:
+                    button.configure(state="disabled", fg_color=("gray75", "gray25"))
+            return
+
         self._back_button.configure(state="normal" if current_index > 0 else "disabled")
         next_enabled = current_index < len(_STEP_ORDER) - 1
         if self._current_step == WizardStep.IMPORT and not self._state.contacts:
@@ -292,9 +380,12 @@ class SMSAutoApp:
 
         for step, button in self._step_buttons.items():
             if step == self._current_step:
-                button.configure(fg_color=("#1f6aa5", "#1f6aa5"))
+                button.configure(state="normal", fg_color=("#1f6aa5", "#1f6aa5"))
+            elif step == WizardStep.SENDING:
+                state = "normal" if self._sending_paused else "disabled"
+                button.configure(state=state, fg_color=("gray75", "gray25"))
             else:
-                button.configure(fg_color=("gray75", "gray25"))
+                button.configure(state="normal", fg_color=("gray75", "gray25"))
 
     def run(self) -> None:
         """Запускает главный цикл событий GUI."""

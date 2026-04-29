@@ -113,14 +113,14 @@ class SendQueue:
         self._set_state(QueueState.RUNNING)
 
         for contact in self._contacts:
-            message = build_message(self._template, contact.variable)
+            message = self._build_message(contact)
             self._emit(SendEventType.QUEUED, contact=contact, message=message)
 
         for index, contact in enumerate(self._contacts):
             if self._wait_if_paused_or_stopped():
                 return
 
-            message = build_message(self._template, contact.variable)
+            message = self._build_message(contact)
             self._emit(SendEventType.SENDING, contact=contact, message=message)
 
             try:
@@ -160,6 +160,11 @@ class SendQueue:
             return
         self._set_state(QueueState.RUNNING)
         self._pause_event.set()
+
+    def update_template(self, template: str) -> None:
+        """Обновляет шаблон для ещё не начатых отправок."""
+        with self._lock:
+            self._template = template
 
     def stop(self) -> None:
         """Останавливает очередь перед следующей отправкой или задержкой."""
@@ -206,6 +211,11 @@ class SendQueue:
     def _set_state(self, state: QueueState) -> None:
         with self._lock:
             self._state = state
+
+    def _build_message(self, contact: Contact) -> str:
+        with self._lock:
+            template = self._template
+        return build_message(template, contact.variable)
 
     def _emit(
         self,

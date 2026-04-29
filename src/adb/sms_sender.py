@@ -1,5 +1,6 @@
 """Команды отправки SMS через Android-приложение-компаньон."""
 
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -124,19 +125,28 @@ def send_sms(
             COMPANION_COMMAND_RECEIVER,
             "--es",
             "auth_token",
-            resolved_auth_token,
+            _quote_shell_extra(resolved_auth_token),
             "--es",
             "request_id",
-            resolved_request_id,
+            _quote_shell_extra(resolved_request_id),
             "--es",
             "phone",
-            normalized_phone,
+            _quote_shell_extra(normalized_phone),
             "--es",
             "message",
-            message,
+            _quote_shell_extra(message),
         ],
         adb_path=adb_path,
         serial=serial,
     )
 
     return SmsCommandResult(request_id=resolved_request_id, adb_result=result)
+
+
+def _quote_shell_extra(value: str) -> str:
+    """Экранирует extra-значение для удалённого Android shell.
+
+    `adb shell` прогоняет `am broadcast` через shell на телефоне, поэтому пробелы,
+    переносы строк, `&`, `;` и другие символы в тексте SMS должны быть защищены.
+    """
+    return shlex.quote(value)
