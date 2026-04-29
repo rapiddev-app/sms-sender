@@ -10,6 +10,7 @@ dependencies = [
 
 [project.scripts]
 sms-auto = "main:main"
+sms-auto-install-companion = "adb.sms_sender:install_and_open_companion"
 
 [build-system]
 requires = ["hatchling"]

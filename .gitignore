@@ -14,6 +14,10 @@ venv/
 .claude/
 /test_contacts.xlsx
 
+# Android local/build artifacts
+.gradle/
+local.properties
+
 # ADB Platform Tools — скачиваются через scripts/fetch_adb.py
 /bin/adb/adb.exe
 /bin/adb/AdbWinApi.dll

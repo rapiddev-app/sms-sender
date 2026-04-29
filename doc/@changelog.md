@@ -1,5 +1,27 @@
 # Авто рассылка СМС - История изменений (Changelog)
 
+## [2026-04-29] — Iteration 2: Android-компаньон для отправки SMS
+
+### Добавлено
+- `android/sms_companion/` — минимальное Android-приложение-компаньон на Java:
+  экран выдачи разрешения `SEND_SMS`, приём ADB-команд через broadcast,
+  отправка SMS через `SmsManager`, фиксация статусов в JSONL-журнал
+- `src/adb/companion.py` — общие ADB-утилиты для работы с Android-компаньоном
+- `src/adb/sms_sender.py` — установка APK, открытие экрана разрешений,
+  чтение auth token и отправка SMS-команд в Android-компаньон
+- `src/adb/status_reader.py` — чтение статусов отправки из приватного журнала
+  Android-компаньона через `adb exec-out run-as`
+- `tests/test_sms_sender.py`, `tests/test_status_reader.py` — unit-тесты ADB-клиента
+  без реального запуска `adb.exe`
+- CLI-команда `sms-auto-install-companion` для установки APK и открытия экрана
+  выдачи разрешений
+- ADR-0004: собственный Android-компаньон вместо автоматизации чужого SMS-приложения
+
+### Изменено
+- План Iteration 2 переведён с `ACTION_SENDTO` на контролируемую отправку через
+  Android-компаньон
+- Android-сборка зафиксирована на совместимой паре AGP `8.12.0` + Gradle `8.13`
+
 ## [2026-04-29] — Iteration 2 (in progress): ADB device_manager
 
 ### Добавлено
