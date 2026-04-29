@@ -2,14 +2,24 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from threading import Thread
-from tkinter import TclError
+from tkinter import TclError, filedialog
 
 import customtkinter as ctk
 
 from adb.sms_sender import SmsCommandResult, send_sms
 from core.models import Contact
+from core.report_exporter import (
+    STATUS_FAILED,
+    STATUS_PENDING,
+    STATUS_SENT,
+    ReportExportError,
+    export_status_report,
+)
 from core.send_queue import QueueState, SendEvent, SendEventType, SendQueue, SendQueueSettings
+
+ReportExportFunc = Callable[[Path, Path, dict[int, str]], None]
 
 
 @dataclass
@@ -34,15 +44,20 @@ class SendingScreen(ctk.CTkFrame):
         master: ctk.CTkBaseClass,
         *,
         contacts: list[Contact],
+        source_excel_path: Path | None,
         template: str,
         settings: SendQueueSettings,
         send_func: Callable[[str, str], SmsCommandResult] = send_sms,
+        export_func: ReportExportFunc = export_status_report,
         on_paused: Callable[[], None] | None = None,
         on_resumed: Callable[[], None] | None = None,
         on_stopped: Callable[[], None] | None = None,
         on_finished: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, fg_color="transparent")
+        self._source_excel_path = source_excel_path
+        self._export_func = export_func
+        self._statuses_by_row = build_initial_statuses(contacts)
         self._stats = SendingStats(total=len(contacts))
         self._destroyed = False
         self._on_paused = on_paused
@@ -120,6 +135,23 @@ class SendingScreen(ctk.CTkFrame):
         )
         self._stop_button.grid(row=0, column=2)
 
+        self._export_button = ctk.CTkButton(
+            controls,
+            text="Выгрузить Excel",
+            command=self._export_report,
+            width=160,
+            state="disabled",
+        )
+        self._export_button.grid(row=0, column=3, padx=(8, 0))
+
+        self._export_status_label = ctk.CTkLabel(
+            controls,
+            text="",
+            anchor="w",
+            text_color=("gray35", "gray70"),
+        )
+        self._export_status_label.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(8, 0))
+
     def _build_log(self) -> None:
         log_panel = ctk.CTkFrame(self)
         log_panel.grid(row=2, column=0, sticky="nsew")
@@ -176,11 +208,13 @@ class SendingScreen(ctk.CTkFrame):
             return
         if event.type == SendEventType.SENT:
             self._stats.sent += 1
+            update_status_from_event(self._statuses_by_row, event, STATUS_SENT)
             self._append_log("✅", event, f"команда принята, request_id={event.request_id}")
             self._refresh_stats()
             return
         if event.type == SendEventType.FAILED:
             self._stats.failed += 1
+            update_status_from_event(self._statuses_by_row, event, STATUS_FAILED)
             self._append_log("❌", event, event.error or "ошибка отправки")
             self._refresh_stats()
             return
@@ -194,6 +228,7 @@ class SendingScreen(ctk.CTkFrame):
         if event.type == SendEventType.STOPPED:
             self._status_label.configure(text="Остановлено. Результат готов к выгрузке")
             self._disable_controls()
+            self._enable_export()
             self._refresh_stats()
             if self._on_stopped is not None:
                 self._on_stopped()
@@ -201,6 +236,7 @@ class SendingScreen(ctk.CTkFrame):
         if event.type == SendEventType.FINISHED:
             self._status_label.configure(text="Рассылка завершена")
             self._disable_controls()
+            self._enable_export()
             self._refresh_stats()
             if self._on_finished is not None:
                 self._on_finished()
@@ -228,6 +264,42 @@ class SendingScreen(ctk.CTkFrame):
         self._pause_button.configure(state="disabled")
         self._stop_button.configure(state="disabled")
 
+    def _enable_export(self) -> None:
+        if self._source_excel_path is None:
+            self._set_export_status("Исходный Excel-файл не выбран", is_error=True)
+            return
+        self._export_button.configure(state="normal")
+
+    def _export_report(self) -> None:
+        if self._source_excel_path is None:
+            self._set_export_status("Исходный Excel-файл не выбран", is_error=True)
+            return
+
+        destination = filedialog.asksaveasfilename(
+            title="Сохранить отчёт Excel",
+            defaultextension=".xlsx",
+            initialfile=build_default_report_filename(self._source_excel_path),
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+        )
+        if not destination:
+            return
+
+        try:
+            self._export_func(
+                self._source_excel_path,
+                Path(destination),
+                self._statuses_by_row,
+            )
+        except (FileNotFoundError, ReportExportError, OSError) as exc:
+            self._set_export_status(str(exc), is_error=True)
+            return
+
+        self._set_export_status("Отчёт сохранён")
+
+    def _set_export_status(self, text: str, *, is_error: bool = False) -> None:
+        color = ("#b00020", "#ff8a80") if is_error else ("gray35", "gray70")
+        self._export_status_label.configure(text=text, text_color=color)
+
 
 def calculate_progress(stats: SendingStats) -> float:
     """Возвращает прогресс от 0 до 1."""
@@ -242,3 +314,24 @@ def build_status_summary(stats: SendingStats) -> str:
         f"Всего: {stats.total} | Обработано: {stats.processed} | "
         f"Успешно: {stats.sent} | Ошибок: {stats.failed}"
     )
+
+
+def build_initial_statuses(contacts: list[Contact]) -> dict[int, str]:
+    """Создаёт начальные статусы отчёта для валидных контактов."""
+    return {contact.row: STATUS_PENDING for contact in contacts}
+
+
+def update_status_from_event(
+    statuses_by_row: dict[int, str],
+    event: SendEvent,
+    status: str,
+) -> None:
+    """Обновляет статус контакта из события очереди."""
+    if event.contact is None:
+        return
+    statuses_by_row[event.contact.row] = status
+
+
+def build_default_report_filename(source_excel_path: Path) -> str:
+    """Формирует имя файла отчёта рядом с исходным Excel."""
+    return f"{source_excel_path.stem}_report.xlsx"

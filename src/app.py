@@ -311,6 +311,7 @@ class SMSAutoApp:
         screen = SendingScreen(
             master,
             contacts=self._state.contacts,
+            source_excel_path=self._state.excel_path,
             template=self._state.template,
             settings=SendQueueSettings(
                 group_size=self._state.group_size,
