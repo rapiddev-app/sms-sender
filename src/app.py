@@ -3,6 +3,8 @@
 Управляет окном и навигацией между экранами (wizard).
 """
 
+import sys
+import tkinter as tk
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -60,6 +62,18 @@ _STEP_SUBTITLES = {
     WizardStep.SENDING: "Прогресс, статусы и управление очередью",
 }
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_ASSETS_DIR_NAME = "assets"
+_APP_ICON_FILENAME = "icon.ico"
+
+
+def _asset_path(filename: str) -> Path:
+    """Возвращает путь к bundled-ресурсу в PyInstaller или к dev-файлу проекта."""
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root is not None:
+        return Path(bundle_root) / _ASSETS_DIR_NAME / filename
+    return _PROJECT_ROOT / _ASSETS_DIR_NAME / filename
+
 
 class SMSAutoApp:
     """Корневой класс приложения — инициализирует окно, тему и wizard-навигацию."""
@@ -80,6 +94,7 @@ class SMSAutoApp:
 
         self._root = ctk.CTk()
         self._root.title("Авто рассылка СМС")
+        self._set_window_icon()
         self._root.geometry("960x680")
         self._root.minsize(800, 600)
         self._root.grid_columnconfigure(0, weight=1)
@@ -92,6 +107,16 @@ class SMSAutoApp:
 
         # Центрируем окно при запуске
         self._root.after(0, self._center_window)
+
+    def _set_window_icon(self) -> None:
+        """Устанавливает иконку окна, если ресурс доступен и принят Tk."""
+        icon_path = _asset_path(_APP_ICON_FILENAME)
+        if not icon_path.is_file():
+            return
+        try:
+            self._root.iconbitmap(str(icon_path))
+        except tk.TclError:
+            return
 
     def _center_window(self) -> None:
         """Размещает окно по центру экрана после инициализации."""
