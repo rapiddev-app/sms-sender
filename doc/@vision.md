@@ -7,7 +7,7 @@
 | Язык | Python | 3.11+ |
 | GUI-фреймворк | CustomTkinter | latest |
 | Чтение Excel | openpyxl | latest |
-| ADB-интеграция | pure-python-adb / системный adb.exe | latest |
+| ADB-интеграция | системный adb.exe + subprocess | platform-tools (Google) |
 | Пакетный менеджер | uv | latest |
 | Сборка в .exe | PyInstaller | latest |
 

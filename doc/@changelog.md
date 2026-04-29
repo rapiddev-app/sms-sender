@@ -1,5 +1,21 @@
 # Авто рассылка СМС - История изменений (Changelog)
 
+## [2026-04-29] — Iteration 2 (in progress): ADB device_manager
+
+### Добавлено
+- `src/adb/device_manager.py` — поиск подключённых Android-устройств через
+  `subprocess` + системный `adb.exe`. Публичные API: `find_adb_executable`,
+  `list_devices`, `get_connection_status`. Парсер `_parse_devices_output`
+  устойчив к шумным строкам adb-демона и метаданным `-l`. Все ошибки
+  оборачиваются в `AdbNotFoundError` / `AdbError`, высокоуровневая функция
+  `get_connection_status` агрегирует их в 7 состояний для GUI
+  (`READY`, `NO_DEVICE`, `UNAUTHORIZED`, `OFFLINE`, `MULTIPLE_DEVICES`,
+  `ADB_NOT_FOUND`, `ADB_ERROR`)
+- `tests/test_device_manager.py` — 22 unit-теста: парсер вывода, обёртка
+  subprocess (моки timeout/exit code/OSError), агрегатор статусов, поиск
+  `adb.exe` (через подмену `_PROJECT_ROOT` и `sys._MEIPASS`)
+- ADR-0003: прямой вызов `adb.exe` вместо `pure-python-adb`
+
 ## [2026-04-29] — Iteration 1 (in progress): Загрузчик Excel
 
 ### Добавлено
