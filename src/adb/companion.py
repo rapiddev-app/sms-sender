@@ -1,6 +1,7 @@
 """Общие утилиты ADB для Android-приложения-компаньона."""
 
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -31,7 +32,13 @@ class AdbCommandResult:
 
 
 def find_companion_apk() -> Path:
-    """Возвращает ожидаемый путь к debug APK Android-компаньона."""
+    """Возвращает путь к debug APK Android-компаньона в бандле или dev-окружении."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        bundled_apk = Path(meipass) / COMPANION_APK_RELATIVE_PATH
+        if bundled_apk.exists():
+            return bundled_apk
+
     return _PROJECT_ROOT / COMPANION_APK_RELATIVE_PATH
 
 
