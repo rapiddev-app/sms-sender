@@ -1,5 +1,6 @@
 """Тесты загрузчика Excel и нормализатора номеров."""
 
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -101,6 +102,16 @@ class TestLoadExcelHappyPath:
         path = make_xlsx([("9991234567", "  Иван  ")])
         result = load_excel(path)
         assert result.contacts[0].variable == "Иван"
+
+    def test_load_excel_formats_date_variable_without_time(self, make_xlsx):
+        path = make_xlsx([("9991234567", date(2026, 12, 23))])
+        result = load_excel(path)
+        assert result.contacts[0].variable == "23.12.2026"
+
+    def test_load_excel_formats_datetime_variable_without_time(self, make_xlsx):
+        path = make_xlsx([("9991234567", datetime(2026, 12, 23, 0, 0, 0))])
+        result = load_excel(path)
+        assert result.contacts[0].variable == "23.12.2026"
 
 
 class TestLoadExcelValidationErrors:

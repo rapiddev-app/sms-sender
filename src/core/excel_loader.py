@@ -9,6 +9,7 @@
 """
 
 import re
+from datetime import date, datetime
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -171,6 +172,10 @@ def _is_empty(value: object) -> bool:
 def _to_str(value: object) -> str:
     if value is None:
         return ""
+    if isinstance(value, datetime):
+        return value.strftime("%d.%m.%Y")
+    if isinstance(value, date):
+        return value.strftime("%d.%m.%Y")
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
